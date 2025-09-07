@@ -1,0 +1,50 @@
+image: gradle:8.7.0-jdk17   # Image de build avec Gradle + JDK17
+
+stages:
+  - build
+  - test
+  - package
+  - docker
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .gradle/wrapper
+    - .gradle/caches
+
+build-job:
+  stage: build
+  script:
+    - gradle clean build -x test
+  artifacts:
+    paths:
+      - build/libs/*.jar
+
+test-job:
+  stage: test
+  script:
+    - gradle test
+  artifacts:
+    when: always
+    reports:
+      junit: build/test-results/test/TEST-*.xml
+
+package-job:
+  stage: package
+  script:
+    - gradle bootJar
+  artifacts:
+    paths:
+      - build/libs/*.jar
+
+docker-build-job:
+  stage: docker
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t registry.gitlab.com/$CI_PROJECT_PATH/app:$CI_COMMIT_SHORT_SHA .
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - docker push registry.gitlab.com/$CI_PROJECT_PATH/app:$CI_COMMIT_SHORT_SHA
+  only:
+    - main
